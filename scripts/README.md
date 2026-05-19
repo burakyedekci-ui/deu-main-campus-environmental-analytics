@@ -13,12 +13,12 @@ Bu depo, Dokuz Eylül Üniversitesi Merkez Kampüsü için üretilen piksel taba
 
 ## Web arayüzü notu
 
-Kök dizindeki `index.html`, web arayüzünü çalıştırmak için iki CSV dosyasını aynı dizinden çağırmaktadır:
+GitHub Pages yayını `docs/index.html` dosyasından çalışmaktadır. Web arayüzü iki CSV dosyasını `docs/` dizininden çağırmaktadır:
 
 - `deu_kampus_piksel_2024_tumdegiskenler.csv`
 - `deu_fakulte_piksel_2024_tumdegiskenler.csv`
 
-Bu nedenle kök dizindeki iki CSV web sunumu için korunmuştur. R analizlerinde kullanılan düzenli ham veri kopyaları `data_raw/` klasöründe yer almaktadır.
+Bu nedenle `docs/` dizinindeki iki CSV web sunumu için korunmuştur. R analizlerinde kullanılan düzenli ham veri kopyaları `data_raw/` klasöründe yer almaktadır.
 
 ## Google Earth Engine iş akışı
 
