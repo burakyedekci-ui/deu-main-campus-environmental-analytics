@@ -1,0 +1,8 @@
+source("scripts/01_prepare_data.R")
+source("scripts/02_descriptive_stats.R")
+source("scripts/03_nonparametric_tests.R")
+source("scripts/04_spatial_analysis.R")
+source("scripts/05_main_figures.R")
+source("scripts/06_appendix_figures.R")
+source("scripts/07_ndbi_sensitivity_analysis.R")
+source("scripts/08_glcm_sensitivity_analysis.R")

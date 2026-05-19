@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DEÜ Merkez Kampüsü — NDVI / NDBI / GLCM</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      overscroll-behavior: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #fff;
+    }
+    canvas {
+      display: block;
+      cursor: grab;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    canvas:active { cursor: grabbing; }
+
+    #buttons {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 2px;
+      z-index: 20;
+      background: rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 3px;
+    }
+    .mode-btn {
+      background: transparent;
+      color: rgba(255,255,255,0.5);
+      border: none;
+      padding: 8px 20px;
+      font-family: inherit;
+      font-size: 12px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.3s ease;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mode-btn.active {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .mode-btn:hover { color: rgba(255,255,255,0.8); }
+
+    #data-toggle {
+      position: fixed;
+      top: 16px;
+      right: 20px;
+      display: flex;
+      gap: 2px;
+      z-index: 20;
+      background: rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 3px;
+    }
+    .toggle-btn {
+      background: transparent;
+      color: rgba(255,255,255,0.5);
+      border: none;
+      padding: 6px 14px;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: all 0.3s ease;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .toggle-btn.active {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .toggle-btn:hover { color: rgba(255,255,255,0.8); }
+
+    #legend {
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
+      padding: 14px 18px;
+      font-size: 13px;
+      line-height: 1.8;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #legend.visible { opacity: 1; }
+    .legend-title {
+      font-size: 14px; font-weight: bold;
+      margin-bottom: 6px; letter-spacing: 0.5px;
+      color: rgba(255,255,255,0.9);
+    }
+    .legend-item {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr);
+      align-items: center;
+      column-gap: 8px;
+      margin-bottom: 1px;
+    }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-label {
+      color: rgba(255,255,255,0.8);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+    .legend-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .legend-count {
+      color: rgba(255,255,255,0.55);
+      flex-shrink: 0;
+    }
+
+    #kampus-info {
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
+      padding: 14px 18px;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #kampus-info.visible { opacity: 1; }
+
+    #credit {
+      position: fixed;
+      bottom: 14px; left: 18px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      letter-spacing: 0.4px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #zoom-info {
+      position: fixed;
+      bottom: 14px; right: 18px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* MOBILE RESPONSIVE */
+    @media (max-width: 768px) {
+      #buttons {
+        top: 8px;
+        left: 8px;
+        transform: none;
+        padding: 2px;
+        gap: 1px;
+      }
+      .mode-btn {
+        padding: 6px 7px;
+        font-size: 9px;
+        letter-spacing: 0.2px;
+      }
+      #data-toggle {
+        top: 8px;
+        right: max(10px, env(safe-area-inset-right));
+        padding: 2px;
+        gap: 1px;
+      }
+      .toggle-btn {
+        padding: 6px 8px;
+        font-size: 9px;
+      }
+      #legend {
+        top: 52px;
+        bottom: auto;
+        left: auto;
+        right: max(10px, env(safe-area-inset-right));
+        padding: 6px 9px;
+        font-size: 8px;
+        line-height: 1.35;
+        max-width: min(168px, calc(100vw - 20px));
+      }
+      .legend-title { font-size: 8px; }
+      .legend-dot { width: 6px; height: 6px; }
+      .legend-label { gap: 6px; }
+      #kampus-info {
+        top: 52px;
+        bottom: auto;
+        left: auto;
+        right: max(10px, env(safe-area-inset-right));
+        padding: 6px 9px;
+        max-width: min(170px, calc(100vw - 20px));
+      }
+      #kampus-count { font-size: 8px; line-height: 1.35; }
+      #credit {
+        bottom: 6px; left: 8px;
+        font-size: 9px;
+      }
+      #zoom-info {
+        bottom: 6px; right: 8px;
+        font-size: 9px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="chart"></canvas>
+
+  <div id="buttons">
+    <button class="mode-btn active" data-mode="manovich">Manovich</button>
+    <button class="mode-btn" data-mode="fakulte">Fakülte</button>
+    <button class="mode-btn" data-mode="kampus">Kampüs</button>
+    <button class="mode-btn" data-mode="thumbnail">Thumbnail</button>
+  </div>
+
+  <div id="data-toggle">
+    <button class="toggle-btn active" data-layer="spektral">NDVI / NDBI</button>
+    <button class="toggle-btn" data-layer="glcm">GLCM</button>
+  </div>
+
+  <div id="kampus-info">
+    <div class="legend-title" style="display:flex; align-items:center; gap:8px;">
+      <span style="width:12px;height:12px;border-radius:50%;background:#2EC4B6;flex-shrink:0;"></span>
+      DEÜ Merkez Kampüsü
+    </div>
+    <div id="kampus-count" style="color:rgba(255,255,255,0.6); font-size:12px; line-height:1.6; margin-top:4px;">
+      Sentinel-2, 2024
+    </div>
+  </div>
+
+  <div id="legend">
+    <div class="legend-title">Fakülte</div>
+    <div id="legend-items"></div>
+  </div>
+
+
+  <div id="zoom-info"></div>
+
+  <script>
+    const colorMap = {
+      "Guzel Sanatlar": "#E07A5F",
+      "Fen Edebiyat":   "#3D405B",
+      "Isletme":        "#81B29A",
+      "Denizcilik":     "#F2CC8F",
+      "Hukuk":          "#5E6472",
+      "Muhendislik":    "#9B2335",
+      "Mimarlik":       "#F0E6D3",
+      "Turizm":         "#577590"
+    };
+    const imageMap = {
+      "Guzel Sanatlar": "photos/gsf.jpg",
+      "Fen Edebiyat":   "photos/fen.jpg",
+      "Isletme":        "photos/isletme.jpg",
+      "Denizcilik":     "photos/denizcilik.jpg",
+      "Hukuk":          "photos/hukuk.jpg",
+      "Muhendislik":    "photos/muhendislik.jpg",
+      "Mimarlik":       "photos/mimarlik.jpg",
+      "Turizm":         "photos/turizm.jpg"
+    };
+
+    const TURQUOISE = "#2EC4B6";
+
+    const legendEl = document.getElementById("legend");
+    const legendTitleEl = legendEl.querySelector(".legend-title");
+    const legendItemsEl = document.getElementById("legend-items");
+
+    function formatCount(n) {
+      return Number(n || 0).toLocaleString("tr-TR");
+    }
+
+    function getFacultyCounts(data) {
+      const counts = {};
+      for (const d of data) {
+        const key = d.fakulte ? d.fakulte.trim() : "";
+        if (!key) continue;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+      return counts;
+    }
+
+    function updateLegendCounts() {
+      const data = currentLayer === "glcm" ? fakulteGlcm : fakulteSpektral;
+      const counts = getFacultyCounts(data);
+      const total = data.length || 0;
+
+      legendTitleEl.textContent = `Fakülte · ${formatCount(total)} piksel`;
+      legendItemsEl.innerHTML = "";
+
+      for (const [name, color] of Object.entries(colorMap)) {
+        const item = document.createElement("div");
+        item.className = "legend-item";
+        item.innerHTML = `
+          <span class="legend-dot" style="background:${color}"></span>
+          <span class="legend-label">
+            <span class="legend-name">${name}</span>
+            <span class="legend-count">${formatCount(counts[name] || 0)}</span>
+          </span>`;
+        legendItemsEl.appendChild(item);
+      }
+    }
+
+    const kampusInfo = document.getElementById("kampus-info");
+    const kampusCount = document.getElementById("kampus-count");
+    const zoomInfo = document.getElementById("zoom-info");
+
+    const images_foto = {};
+    for (const [fak, src] of Object.entries(imageMap)) {
+      const img = new Image();
+      img.src = src;
+      images_foto[fak] = img;
+    }
+
+    const canvas = document.getElementById("chart");
+    const ctx = canvas.getContext("2d");
+
+    let W, H;
+    function resize() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W * devicePixelRatio;
+      canvas.height = H * devicePixelRatio;
+      canvas.style.width = W + "px";
+      canvas.style.height = H + "px";
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    }
+    resize();
+
+    const isMobile = () => window.innerWidth < 768;
+    const getMargin = () => isMobile()
+      ? { top: 45, right: 15, bottom: 45, left: 58 }
+      : { top: 50, right: 40, bottom: 60, left: 70 };
+    let margin = getMargin();
+    let transform = d3.zoomIdentity;
+    let currentMode = "manovich";
+    let currentLayer = "spektral";
+
+    let kampusSpektral = [], kampusGlcm = [];
+    let fakulteSpektral = [], fakulteGlcm = [];
+    let scales = {};
+
+    function buildScales() {
+      function ms(data, xK, yK) {
+        const xE = d3.extent(data, d => d[xK]);
+        const yE = d3.extent(data, d => d[yK]);
+        const xP = (xE[1] - xE[0]) * 0.05 || 0.05;
+        const yP = (yE[1] - yE[0]) * 0.05 || 0.05;
+        return {
+          x: d3.scaleLinear().domain([xE[0] - xP, xE[1] + xP]).range([margin.left, W - margin.right]),
+          y: d3.scaleLinear().domain([yE[0] - yP, yE[1] + yP]).range([H - margin.bottom, margin.top])
+        };
+      }
+      if (kampusSpektral.length) scales.kS = ms(kampusSpektral, "ndvi", "ndbi");
+      if (kampusGlcm.length) scales.kG = ms(kampusGlcm, "glcm_contrast", "glcm_homogeneity");
+      if (fakulteSpektral.length) scales.fS = ms(fakulteSpektral, "ndvi", "ndbi");
+      if (fakulteGlcm.length) scales.fG = ms(fakulteGlcm, "glcm_contrast", "glcm_homogeneity");
+    }
+
+    function getSc() {
+      const g = currentLayer === "glcm";
+      if (currentMode === "kampus" || currentMode === "manovich") return g ? scales.kG : scales.kS;
+      return g ? scales.fG : scales.fS;
+    }
+
+    function keys() {
+      return currentLayer === "glcm"
+        ? { x: "glcm_contrast", y: "glcm_homogeneity" }
+        : { x: "ndvi", y: "ndbi" };
+    }
+
+    function drawThumbSquare(img, x, y, size, borderColor, alpha = 1) {
+      if (!img || !img.complete) return;
+      const sw = img.naturalWidth || img.width;
+      const sh = img.naturalHeight || img.height;
+      if (!sw || !sh) return;
+
+      const s = Math.min(sw, sh);
+      const sx = (sw - s) / 2;
+      const sy = (sh - s) / 2;
+      const half = size / 2;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(img, sx, sy, s, s, x - half, y - half, size, size);
+      ctx.strokeStyle = borderColor || "rgba(255,255,255,0.35)";
+      ctx.lineWidth = Math.max(0.8, size * 0.045);
+      ctx.strokeRect(x - half, y - half, size, size);
+      ctx.restore();
+    }
+
+    function drawAxes(zx, zy) {
+      const lab = currentLayer === "glcm"
+        ? { x: "GLCM Contrast", y: "GLCM Homogeneity" }
+        : { x: "NDVI", y: "NDBI" };
+      const mob = isMobile();
+      const axisTickFont = mob
+        ? '9px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif'
+        : '11px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+      const axisLabelFont = mob
+        ? '10px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif'
+        : '13px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+      const tickCount = mob ? 5 : 8;
+
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(margin.left, H - margin.bottom);
+      ctx.lineTo(W - margin.right, H - margin.bottom);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(margin.left, margin.top);
+      ctx.lineTo(margin.left, H - margin.bottom);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = axisTickFont;
+      ctx.textAlign = "center";
+      zx.ticks(tickCount).forEach(t => {
+        const x = zx(t);
+        if (x >= margin.left && x <= W - margin.right) {
+          ctx.beginPath(); ctx.moveTo(x, H - margin.bottom); ctx.lineTo(x, H - margin.bottom + 5); ctx.stroke();
+          ctx.fillText(currentLayer === "glcm" ? t.toFixed(0) : t.toFixed(2), x, H - margin.bottom + (mob ? 14 : 18));
+        }
+      });
+
+      ctx.textAlign = "right";
+      zy.ticks(tickCount).forEach(t => {
+        const y = zy(t);
+        if (y >= margin.top && y <= H - margin.bottom) {
+          ctx.beginPath(); ctx.moveTo(margin.left - 5, y); ctx.lineTo(margin.left, y); ctx.stroke();
+          ctx.fillText(currentLayer === "glcm" ? t.toFixed(1) : t.toFixed(2), margin.left - 8, y + 4);
+        }
+      });
+
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = axisLabelFont;
+      ctx.textAlign = "center";
+      ctx.fillText(lab.x, (margin.left + W - margin.right) / 2, H - (mob ? 4 : 12));
+      ctx.save();
+      ctx.translate(mob ? 14 : 16, (margin.top + H - margin.bottom) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(lab.y, 0, 0);
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, W, H);
+
+      const sc = getSc();
+      if (!sc) return;
+      const k_ = keys();
+
+      // Statik modlar
+      if (currentMode === "kampus" || currentMode === "fakulte") {
+        if (currentMode === "kampus") {
+          legendEl.classList.remove("visible");
+          kampusInfo.classList.add("visible");
+          const data = currentLayer === "glcm" ? kampusGlcm : kampusSpektral;
+          kampusCount.textContent = data.length.toLocaleString("tr-TR") + " piksel · Sentinel-2, 2024";
+        } else {
+          legendEl.classList.add("visible");
+          kampusInfo.classList.remove("visible");
+        }
+        if (zoomInfo) zoomInfo.textContent = "";
+        canvas.style.cursor = "default";
+
+        const cached = drawToCache();
+        if (cached) {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.drawImage(cached, 0, 0);
+          ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        }
+        return;
+      }
+
+      // Thumbnail modu
+      if (currentMode === "thumbnail") {
+        legendEl.classList.add("visible");
+        kampusInfo.classList.remove("visible");
+        if (zoomInfo) zoomInfo.textContent = "";
+        canvas.style.cursor = "grab";
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(margin.left, margin.top, W - margin.left - margin.right, H - margin.top - margin.bottom);
+        ctx.clip();
+
+        const zx = transform.rescaleX(sc.x);
+        const zy = transform.rescaleY(sc.y);
+        const k = transform.k;
+        const data = currentLayer === "glcm" ? fakulteGlcm : fakulteSpektral;
+
+        // Bu modda başlangıçtan itibaren yalnızca görseller görünür.
+        // Uzak görünümde çok küçük thumbnail'ler, zoom ile büyüyen aynı görseller.
+        const baseSize = isMobile() ? 10.5 : 12.5;
+        const growth = isMobile() ? 3.3 : 4.1;
+        const photoSize = Math.max(baseSize, Math.min(isMobile() ? 46 : 58, baseSize + (k - 1) * growth));
+
+        // Başlangıçta tüm görünür thumbnail'leri çiz.
+        // Çok yüksek zoom seviyelerinde de performansı korumak için üst sınır koy.
+        const maxThumbs = k < 1.8 ? 4000 : (k < 3 ? 2600 : 1800);
+
+        let thumbsDrawn = 0;
+        for (let i = 0; i < data.length; i++) {
+          const d = data[i];
+          const x = zx(d[k_.x]);
+          const y = zy(d[k_.y]);
+          if (x < margin.left - 14 || x > W - margin.right + 14 || y < margin.top - 14 || y > H - margin.bottom + 14) continue;
+
+          const img = images_foto[d.fakulte];
+          if (!img || !img.complete) continue;
+
+          const c = colorMap[d.fakulte] || "rgba(255,255,255,0.35)";
+          const alpha = Math.min(1, 0.78 + Math.max(0, k - 1) * 0.08);
+          const scaledSize = photoSize * (k < 1.3 ? 0.96 : 1);
+
+          drawThumbSquare(img, x, y, scaledSize, c, alpha);
+          thumbsDrawn++;
+          if (thumbsDrawn >= maxThumbs) break;
+        }
+
+        ctx.restore();
+        drawAxes(zx, zy);
+        return;
+      }
+
+      // Manovich modu
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(margin.left, margin.top, W - margin.left - margin.right, H - margin.top - margin.bottom);
+      ctx.clip();
+
+      const zx = transform.rescaleX(sc.x);
+      const zy = transform.rescaleY(sc.y);
+      const k = transform.k;
+
+      const blendStart = 2.2;
+      const blendEnd = 3.4;
+      const photoStart = 4.6;
+      const photoEnd = 5.8;
+
+      const blendT = Math.max(0, Math.min(1, (k - blendStart) / (blendEnd - blendStart)));
+      const photoT = Math.max(0, Math.min(1, (k - photoStart) / (photoEnd - photoStart)));
+
+      const campusAlpha = 1 - blendT;
+      const facultyAlpha = blendT;
+      const photoAlpha = photoT;
+      const pointAlpha = 1 - photoT * 0.55;
+
+      if (facultyAlpha > 0.08) {
+        legendEl.classList.add("visible");
+        kampusInfo.classList.remove("visible");
+      } else {
+        legendEl.classList.remove("visible");
+        kampusInfo.classList.add("visible");
+        const kData = currentLayer === "glcm" ? kampusGlcm : kampusSpektral;
+        kampusCount.textContent = kData.length.toLocaleString("tr-TR") + " piksel · Sentinel-2, 2024";
+      }
+
+      const campusData = currentLayer === "glcm" ? kampusGlcm : kampusSpektral;
+      if (campusAlpha > 0.01) {
+        ctx.fillStyle = TURQUOISE;
+        ctx.globalAlpha = 0.9 * campusAlpha;
+        for (let i = 0; i < campusData.length; i++) {
+          const d = campusData[i];
+          const x = zx(d[k_.x]);
+          const y = zy(d[k_.y]);
+          if (x < margin.left - 5 || x > W - margin.right + 5 || y < margin.top - 5 || y > H - margin.bottom + 5) continue;
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(0.55, 0.58 * Math.min(k, 3.2)), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      const facultyData = currentLayer === "glcm" ? fakulteGlcm : fakulteSpektral;
+      const pointRadius = Math.max(0.7, 0.72 + Math.max(0, k - blendStart) * 0.22);
+      const photoSize = Math.max(22, Math.min(66, 18 + (k - photoStart) * 6));
+
+      if (facultyAlpha > 0.01) {
+        let photosDrawn = 0;
+
+        for (let i = 0; i < facultyData.length; i++) {
+          const d = facultyData[i];
+          const x = zx(d[k_.x]);
+          const y = zy(d[k_.y]);
+          if (x < margin.left - 12 || x > W - margin.right + 12 || y < margin.top - 12 || y > H - margin.bottom + 12) continue;
+
+          ctx.fillStyle = colorMap[d.fakulte] || "#fff";
+          ctx.globalAlpha = 0.92 * facultyAlpha * pointAlpha;
+          ctx.beginPath();
+          ctx.arc(x, y, pointRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (photoAlpha > 0.02 && photosDrawn < 120 && images_foto[d.fakulte] && images_foto[d.fakulte].complete) {
+            const scaledSize = photoSize * (0.94 + photoAlpha * 0.06);
+            drawThumbSquare(images_foto[d.fakulte], x, y, scaledSize, colorMap[d.fakulte] || "rgba(255,255,255,0.25)", facultyAlpha * photoAlpha);
+            photosDrawn++;
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+      drawAxes(zx, zy);
+    }
+
+
+    function clampTransform(t) {
+      if (!t) return d3.zoomIdentity;
+      if (t.k <= 1.01) return d3.zoomIdentity;
+
+      const left = margin.left;
+      const right = W - margin.right;
+      const top = margin.top;
+      const bottom = H - margin.bottom;
+
+      const minX = right * (1 - t.k);
+      const maxX = left * (1 - t.k);
+      const minY = bottom * (1 - t.k);
+      const maxY = top * (1 - t.k);
+
+      const x = Math.max(minX, Math.min(maxX, t.x));
+      const y = Math.max(minY, Math.min(maxY, t.y));
+
+      return d3.zoomIdentity.translate(x, y).scale(t.k);
+    }
+
+    function applyZoomBounds() {
+      zoom
+        .extent([[margin.left, margin.top], [W - margin.right, H - margin.bottom]])
+        .translateExtent([[margin.left, margin.top], [W - margin.right, H - margin.bottom]]);
+      d3.select(canvas).call(zoom);
+    }
+
+    const zoom = d3.zoom()
+      .scaleExtent([1, 25])
+      .extent([[margin.left, margin.top], [W - margin.right, H - margin.bottom]])
+      .translateExtent([[margin.left, margin.top], [W - margin.right, H - margin.bottom]])
+      .filter((event) => {
+        if (currentMode !== "manovich" && currentMode !== "thumbnail") return false;
+        return true;
+      })
+      .on("zoom", (event) => {
+        const next = clampTransform(event.transform);
+        const changed = Math.abs(next.x - event.transform.x) > 0.01 ||
+                        Math.abs(next.y - event.transform.y) > 0.01 ||
+                        Math.abs(next.k - event.transform.k) > 0.0001;
+
+        if (changed) {
+          d3.select(canvas).call(zoom.transform, next);
+          return;
+        }
+
+        transform = next;
+        draw();
+      });
+
+    applyZoomBounds();
+
+    document.querySelectorAll(".mode-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentMode = btn.dataset.mode;
+        if (currentMode === "manovich" || currentMode === "thumbnail") {
+          applyZoomBounds();
+          transform = d3.zoomIdentity;
+          d3.select(canvas).call(zoom.transform, d3.zoomIdentity);
+        }
+        updateLegendCounts();
+        draw();
+      });
+    });
+
+    document.querySelectorAll(".toggle-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".toggle-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentLayer = btn.dataset.layer;
+        if (currentMode === "manovich" || currentMode === "thumbnail") {
+          applyZoomBounds();
+          transform = d3.zoomIdentity;
+          d3.select(canvas).call(zoom.transform, d3.zoomIdentity);
+        }
+        updateLegendCounts();
+        draw();
+      });
+    });
+
+    // Offscreen canvas cache (statik modlar için)
+    let staticCache = null;
+    let staticCacheKey = "";
+
+    function getStaticKey() {
+      return currentMode + "_" + currentLayer + "_" + W + "_" + H;
+    }
+
+    function drawToCache() {
+      const key = getStaticKey();
+      if (staticCacheKey === key && staticCache) return staticCache;
+
+      const offscreen = document.createElement("canvas");
+      offscreen.width = W * devicePixelRatio;
+      offscreen.height = H * devicePixelRatio;
+      const octx = offscreen.getContext("2d");
+      octx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+
+      octx.fillStyle = "#000";
+      octx.fillRect(0, 0, W, H);
+
+      const sc = getSc();
+      if (!sc) return null;
+      const k_ = keys();
+
+      octx.save();
+      octx.beginPath();
+      octx.rect(margin.left, margin.top, W - margin.left - margin.right, H - margin.top - margin.bottom);
+      octx.clip();
+
+      if (currentMode === "kampus") {
+        const data = currentLayer === "glcm" ? kampusGlcm : kampusSpektral;
+        octx.fillStyle = TURQUOISE;
+        octx.globalAlpha = 0.9;
+        for (let i = 0; i < data.length; i++) {
+          const d = data[i];
+          octx.beginPath();
+          octx.arc(sc.x(d[k_.x]), sc.y(d[k_.y]), 0.5, 0, Math.PI * 2);
+          octx.fill();
+        }
+      } else {
+        const data = currentLayer === "glcm" ? fakulteGlcm : fakulteSpektral;
+        for (let i = 0; i < data.length; i++) {
+          const d = data[i];
+          octx.fillStyle = colorMap[d.fakulte] || "#fff";
+          octx.globalAlpha = 0.9;
+          octx.beginPath();
+          octx.arc(sc.x(d[k_.x]), sc.y(d[k_.y]), 1.2, 0, Math.PI * 2);
+          octx.fill();
+        }
+      }
+      octx.globalAlpha = 1;
+      octx.restore();
+
+      // Axes on offscreen
+      octx.strokeStyle = "rgba(255,255,255,0.25)";
+      octx.lineWidth = 0.5;
+      octx.beginPath();
+      octx.moveTo(margin.left, H - margin.bottom);
+      octx.lineTo(W - margin.right, H - margin.bottom);
+      octx.stroke();
+      octx.beginPath();
+      octx.moveTo(margin.left, margin.top);
+      octx.lineTo(margin.left, H - margin.bottom);
+      octx.stroke();
+
+      const lab = currentLayer === "glcm"
+        ? { x: "GLCM Contrast", y: "GLCM Homogeneity" }
+        : { x: "NDVI", y: "NDBI" };
+
+      const cacheMob = isMobile();
+      const cacheAxisTickFont = cacheMob
+        ? '9px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif'
+        : '11px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+      const cacheAxisLabelFont = cacheMob
+        ? '10px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif'
+        : '13px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+      const cacheTickCount = cacheMob ? 5 : 8;
+
+      octx.fillStyle = "rgba(255,255,255,0.6)";
+      octx.font = cacheAxisTickFont;
+      octx.textAlign = "center";
+      sc.x.ticks(cacheTickCount).forEach(t => {
+        const x = sc.x(t);
+        if (x >= margin.left && x <= W - margin.right) {
+          octx.beginPath(); octx.moveTo(x, H - margin.bottom); octx.lineTo(x, H - margin.bottom + 5); octx.stroke();
+          octx.fillText(currentLayer === "glcm" ? t.toFixed(0) : t.toFixed(2), x, H - margin.bottom + (cacheMob ? 14 : 18));
+        }
+      });
+      octx.textAlign = "right";
+      sc.y.ticks(cacheTickCount).forEach(t => {
+        const y = sc.y(t);
+        if (y >= margin.top && y <= H - margin.bottom) {
+          octx.beginPath(); octx.moveTo(margin.left - 5, y); octx.lineTo(margin.left, y); octx.stroke();
+          octx.fillText(currentLayer === "glcm" ? t.toFixed(1) : t.toFixed(2), cacheMob ? margin.left - 8 : margin.left - 8, y + 4);
+        }
+      });
+      octx.fillStyle = "rgba(255,255,255,0.7)";
+      octx.font = cacheAxisLabelFont;
+      octx.textAlign = "center";
+      octx.fillText(lab.x, (margin.left + W - margin.right) / 2, H - (cacheMob ? 4 : 12));
+      octx.save();
+      octx.translate(cacheMob ? 14 : 16, (margin.top + H - margin.bottom) / 2);
+      octx.rotate(-Math.PI / 2);
+      octx.fillText(lab.y, 0, 0);
+      octx.restore();
+
+      staticCache = offscreen;
+      staticCacheKey = key;
+      return offscreen;
+    }
+
+    Promise.all([
+      d3.csv("deu_kampus_piksel_2024_tumdegiskenler.csv", d => ({ ndvi: +d.ndvi, ndbi: +d.ndbi })),
+      d3.csv("deu_kampus_piksel_2024_tumdegiskenler.csv", d => ({ glcm_contrast: +d.glcm_contrast, glcm_homogeneity: +d.glcm_homogeneity })),
+      d3.csv("deu_fakulte_piksel_2024_tumdegiskenler.csv", d => ({ ndvi: +d.ndvi, ndbi: +d.ndbi, fakulte: d.fakulte ? d.fakulte.trim() : "" })),
+      d3.csv("deu_fakulte_piksel_2024_tumdegiskenler.csv", d => ({ glcm_contrast: +d.glcm_contrast, glcm_homogeneity: +d.glcm_homogeneity, fakulte: d.fakulte ? d.fakulte.trim() : "" }))
+    ]).then(([ks, kg, fs, fg]) => {
+      const ksF = ks.filter(d => Number.isFinite(d.ndvi) && Number.isFinite(d.ndbi));
+      const kgF = kg.filter(d => Number.isFinite(d.glcm_contrast) && Number.isFinite(d.glcm_homogeneity));
+      kampusSpektral = ksF;
+      kampusGlcm = kgF;
+      fakulteSpektral = fs.filter(d => Number.isFinite(d.ndvi) && Number.isFinite(d.ndbi) && d.fakulte);
+      fakulteGlcm = fg.filter(d => Number.isFinite(d.glcm_contrast) && Number.isFinite(d.glcm_homogeneity) && d.fakulte);
+      buildScales();
+      updateLegendCounts();
+      draw();
+    }).catch(err => {
+      ctx.fillStyle = "#fff";
+      ctx.font = "14px monospace";
+      ctx.fillText("Veri dosyaları yüklenemedi: " + err.message, 20, 30);
+      console.error(err);
+    });
+
+    window.addEventListener("resize", () => {
+      resize();
+      margin = getMargin();
+      staticCache = null; staticCacheKey = "";
+      if (kampusSpektral.length) {
+        buildScales();
+        applyZoomBounds();
+        if (currentMode === "manovich" || currentMode === "thumbnail") {
+          transform = d3.zoomIdentity;
+          d3.select(canvas).call(zoom.transform, d3.zoomIdentity);
+        } else {
+          draw();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
